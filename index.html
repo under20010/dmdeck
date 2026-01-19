@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>観戦メモ（DMP用）</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:#f3f4f6;
+      font-size:14px;
+    }
+    header{
+      background:#111827;
+      color:#fff;
+      padding:12px 16px;
+      text-align:center;
+    }
+    header h1{
+      margin:0;
+      font-size:18px;
+      line-height:1.3;
+    }
+    main{
+      max-width:800px;
+      margin:0 auto;
+      padding:12px;
+    }
+    .section{
+      background:#fff;
+      border-radius:10px;
+      padding:12px;
+      margin-bottom:12px;
+      box-shadow:0 1px 3px rgba(0,0,0,.08);
+      border:1px solid #e5e7eb;
+    }
+    .section h2{
+      margin:0 0 8px 0;
+      font-size:15px;
+    }
+    label{ display:block; margin-bottom:6px; }
+    input[type="number"],
+    input[type="text"],
+    textarea{
+      width:100%;
+      box-sizing:border-box;
+      padding:6px 8px;
+      border-radius:6px;
+      border:1px solid #d1d5db;
+      font-size:14px;
+    }
+    textarea{ min-height:60px; resize:vertical; }
+
+    button{
+      border:none;
+      border-radius:999px;
+      padding:8px 14px;
+      font-size:13px;
+      cursor:pointer;
+      background:#2563eb;
+      color:#fff;
+    }
+    button:disabled{
+      background:#9ca3af;
+      cursor:default;
+    }
+
+    .small-btn{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:999px;
+      margin:2px 2px 4px 0;
+    }
+
+    .color-btn{ color:#111827; background:#e5e7eb; }
+    .color-btn.active{ border:2px solid #111827; }
+
+    .deck-btn{
+      background:#e5e7eb;
+      color:#111827;
+    }
+    .deck-btn.active{
+      background:#111827;
+      color:#fff;
+    }
+
+    .note-item{
+      border-top:1px solid #e5e7eb;
+      padding:8px 0;
+    }
+    .note-header{
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      font-size:13px;
+    }
+    .note-tags{
+      font-size:11px;
+      color:#4b5563;
+      margin-top:2px;
+    }
+    .note-memo{
+      margin-top:4px;
+      font-size:13px;
+      white-space:pre-wrap;
+    }
+    .pill{
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:10px;
+      margin-right:4px;
+      background:#e5e7eb;
+      color:#111827;
+    }
+    .danger{
+      background:#b91c1c;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>観戦メモ（大会中）</h1>
+</header>
+<main>
+  <section class="section">
+    <h2>今のラウンド</h2>
+    <label>
+      ラウンド番号：
+      <input type="number" id="roundInput" min="1" value="1">
+    </label>
+    <p>ラウンドごとに観戦メモを分けて保存します。</p>
+  </section>
+
+  <section class="section">
+    <h2>新しい観戦メモ</h2>
+
+    <label>
+      卓番号：
+      <input type="number" id="tableInput" min="1" placeholder="例：5">
+    </label>
+
+    <label>
+      デッキタイプ（よく見るものはタップ）：
+    </label>
+    <div id="deckButtons"></div>
+    <input type="text" id="deckInput" placeholder="自由入力（例：アナカラーハンデス）">
+
+    <label style="margin-top:8px;">文明（使っていそうな色にタップ）：</label>
+    <div id="colorButtons"></div>
+
+    <label style="margin-top:8px;">
+      メモ（気になったカードや動き）：
+      <textarea id="memoInput" placeholder="例：3ターン目にドルファディロム、終盤にミラダンテ…"></textarea>
+    </label>
+
+    <button id="saveBtn">この観戦メモを保存</button>
+  </section>
+
+  <section class="section">
+    <h2>このラウンドの観戦メモ一覧</h2>
+    <div id="notesList"></div>
+  </section>
+</main>
+
+<script>
+  // 文明ボタンとデッキボタンの候補
+  const colorOptions = ["火","水","自然","闇","光"];
+  const deckPresets = [
+    "アナカラーハンデス",
+    "アナカラー墓地ソ",
+    "5cコントロール",
+    "赤単ブランド",
+    "赤白サムライ",
+    "青魔導具",
+    "JO退化"
+  ];
+
+  const colorButtonsContainer = document.getElementById("colorButtons");
+  const deckButtonsContainer = document.getElementById("deckButtons");
+
+  const roundInput = document.getElementById("roundInput");
+  const tableInput = document.getElementById("tableInput");
+  const deckInput  = document.getElementById("deckInput");
+  const memoInput  = document.getElementById("memoInput");
+  const saveBtn    = document.getElementById("saveBtn");
+  const notesList  = document.getElementById("notesList");
+
+  // ローカル保存用キー
+  const STORAGE_KEY = "watch_notes_dmp";
+
+  function loadNotes(){
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return [];
+    try{
+      return JSON.parse(raw);
+    }catch(e){
+      return [];
+    }
+  }
+  function saveNotes(notes){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+  }
+
+  let notes = loadNotes();
+
+  // 文明ボタン生成
+  const selectedColors = new Set();
+  colorOptions.forEach(col=>{
+    const btn = document.createElement("button");
+    btn.textContent = col;
+    btn.type = "button";
+    btn.className = "small-btn color-btn";
+    btn.addEventListener("click", ()=>{
+      if(selectedColors.has(col)){
+        selectedColors.delete(col);
+        btn.classList.remove("active");
+      }else{
+        selectedColors.add(col);
+        btn.classList.add("active");
+      }
+    });
+    colorButtonsContainer.appendChild(btn);
+  });
+
+  // デッキボタン生成
+  let activeDeckPreset = "";
+  deckPresets.forEach(name=>{
+    const btn = document.createElement("button");
+    btn.textContent = name;
+    btn.type = "button";
+    btn.className = "small-btn deck-btn";
+    btn.addEventListener("click", ()=>{
+      // 切り替え
+      const all = deckButtonsContainer.querySelectorAll("button");
+      all.forEach(b=>b.classList.remove("active"));
+      if(activeDeckPreset === name){
+        activeDeckPreset = "";
+        deckInput.value = "";
+      }else{
+        activeDeckPreset = name;
+        btn.classList.add("active");
+        deckInput.value = name;
+      }
+    });
+    deckButtonsContainer.appendChild(btn);
+  });
+
+  // 観戦メモ描画
+  function renderNotes(){
+    const round = Number(roundInput.value || "1");
+    notesList.innerHTML = "";
+    const filtered = notes.filter(n=>n.round === round);
+    if(filtered.length === 0){
+      const p = document.createElement("p");
+      p.textContent = "このラウンドの観戦メモはまだありません。";
+      notesList.appendChild(p);
+      return;
+    }
+    filtered
+      .sort((a,b)=>a.createdAt - b.createdAt)
+      .forEach(n=>{
+        const div = document.createElement("div");
+        div.className = "note-item";
+
+        const header = document.createElement("div");
+        header.className = "note-header";
+
+        const left = document.createElement("div");
+        left.textContent = `卓${n.table || "?"} / ${n.deck || "デッキ不明"}`;
+
+        const right = document.createElement("div");
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "削除";
+        delBtn.type = "button";
+        delBtn.className = "small-btn danger";
+        delBtn.addEventListener("click", ()=>{
+          notes = notes.filter(x=>x.id !== n.id);
+          saveNotes(notes);
+          renderNotes();
+        });
+        right.appendChild(delBtn);
+
+        header.appendChild(left);
+        header.appendChild(right);
+        div.appendChild(header);
+
+        const tags = document.createElement("div");
+        tags.className = "note-tags";
+
+        const pillRound = document.createElement("span");
+        pillRound.className = "pill";
+        pillRound.textContent = `${n.round}回戦`;
+        tags.appendChild(pillRound);
+
+        if(n.colors && n.colors.length>0){
+          const pillColor = document.createElement("span");
+          pillColor.className = "pill";
+          pillColor.textContent = "文明: " + n.colors.join("");
+          tags.appendChild(pillColor);
+        }
+
+        div.appendChild(tags);
+
+        if(n.memo){
+          const memoDiv = document.createElement("div");
+          memoDiv.className = "note-memo";
+          memoDiv.textContent = n.memo;
+          div.appendChild(memoDiv);
+        }
+
+        notesList.appendChild(div);
+      });
+  }
+
+  // 保存ボタン
+  saveBtn.addEventListener("click", ()=>{
+    const round = Number(roundInput.value || "1");
+    const table = tableInput.value ? Number(tableInput.value) : null;
+    const deck  = deckInput.value.trim();
+    const memo  = memoInput.value.trim();
+    const colors = Array.from(selectedColors);
+
+    if(!table){
+      alert("卓番号は必須です。");
+      return;
+    }
+
+    const newNote = {
+      id: Date.now(),
+      round,
+      table,
+      deck,
+      colors,
+      memo,
+      createdAt: Date.now()
+    };
+    notes.push(newNote);
+    saveNotes(notes);
+
+    // 入力リセット（卓番号だけ残してもよい）
+    deckInput.value = "";
+    memoInput.value = "";
+    activeDeckPreset = "";
+    const deckBtns = deckButtonsContainer.querySelectorAll("button");
+    deckBtns.forEach(b=>b.classList.remove("active"));
+    selectedColors.clear();
+    const colorBtns = colorButtonsContainer.querySelectorAll("button");
+    colorBtns.forEach(b=>b.classList.remove("active"));
+
+    renderNotes();
+  });
+
+  // ラウンド変更時に一覧切り替え
+  roundInput.addEventListener("change", renderNotes);
+
+  // 初期表示
+  renderNotes();
+</script>
+</body>
+</html>
