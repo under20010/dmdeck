@@ -68,6 +68,30 @@
       color:#6b7280;
     }
 
+    button{
+      border:none;
+      border-radius:999px;
+      padding:6px 12px;
+      font-size:13px;
+      cursor:pointer;
+      background:#e5e7eb;
+      color:#111827;
+      margin-right:6px;
+      margin-bottom:6px;
+    }
+    button.danger{
+      background:#b91c1c;
+      color:#fff;
+    }
+    button.warning{
+      background:#f97316;
+      color:#fff;
+    }
+    button.primary{
+      background:#2563eb;
+      color:#fff;
+    }
+
     @media (min-width:640px){
       .table-row{
         flex-direction:row;
@@ -103,7 +127,7 @@
     </label>
 
     <p class="small-label">
-      入力内容は自動保存されます。同じ端末・ブラウザで保持されます。
+      入力内容はラウンドごとに自動保存されます（同じ端末・同じブラウザで有効）。
     </p>
   </section>
 
@@ -111,12 +135,21 @@
     <h2>卓ごとのメモ</h2>
     <div id="tableList"></div>
   </section>
+
+  <section class="section">
+    <h2>操作</h2>
+    <button id="resetRoundBtn" class="warning">このラウンドをリセット</button>
+    <button id="resetAllBtn" class="danger">全ラウンドをリセット</button>
+    <button id="copyRoundBtn" class="primary">このラウンド内容をコピー</button>
+    <p class="small-label">
+      コピーしたテキストをLINEやDiscordに貼れば、他の人も内容を確認できます。
+    </p>
+  </section>
 </main>
 
 <script>
-  const STORAGE_KEY = "watch_notes_by_table_simple_v1";
+  const STORAGE_KEY = "watch_notes_by_table_simple_v2";
 
-  // 保存・読込
   function loadData(){
     try{
       return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
@@ -133,6 +166,9 @@
   const roundInput = document.getElementById("roundInput");
   const maxTableInput = document.getElementById("maxTableInput");
   const tableList = document.getElementById("tableList");
+  const resetRoundBtn = document.getElementById("resetRoundBtn");
+  const resetAllBtn = document.getElementById("resetAllBtn");
+  const copyRoundBtn = document.getElementById("copyRoundBtn");
 
   function currentRound(){
     const r = Number(roundInput.value || "1");
@@ -145,7 +181,7 @@
   }
 
   function saveRow(round, tableNo){
-    const row = document.querySelector(`.table-row[data-table="${tableNo}"]`);
+    const row = document.querySelector('.table-row[data-table="' + tableNo + '"]');
     if(!row) return;
 
     const deck = row.querySelector(".deck-input").value.trim();
@@ -153,7 +189,6 @@
 
     const roundData = getRoundData(round);
 
-    // まったく空なら保存しない（データ削除）
     if(!deck && !memo){
       delete roundData[tableNo];
     }else{
@@ -187,7 +222,7 @@
 
       const title = document.createElement("div");
       title.className = "table-title";
-      title.textContent = `卓${t}`;
+      title.textContent = "卓" + t;
       colInfo.appendChild(title);
 
       const deckLabel = document.createElement("div");
@@ -220,13 +255,64 @@
       row.appendChild(colMemo);
       tableList.appendChild(row);
 
-      deckInput.addEventListener("input", ()=> saveRow(round, t));
-      memoInput.addEventListener("input", ()=> saveRow(round, t));
+      deckInput.addEventListener("input", function(){ saveRow(round, t); });
+      memoInput.addEventListener("input", function(){ saveRow(round, t); });
     }
   }
 
-  roundInput.addEventListener("change", ()=> renderTables());
-  maxTableInput.addEventListener("change", ()=> renderTables());
+  roundInput.addEventListener("change", function(){
+    renderTables();
+  });
+  maxTableInput.addEventListener("change", function(){
+    renderTables();
+  });
+
+  resetRoundBtn.addEventListener("click", function(){
+    const round = currentRound();
+    if(!confirm("ラウンド" + round + "の内容を全て消しますか？")){
+      return;
+    }
+    delete data[round];
+    saveData(data);
+    renderTables();
+  });
+
+  resetAllBtn.addEventListener("click", function(){
+    if(!confirm("全てのラウンドのデータを消しますか？")){
+      return;
+    }
+    data = {};
+    saveData(data);
+    renderTables();
+  });
+
+  copyRoundBtn.addEventListener("click", function(){
+    const round = currentRound();
+    const roundData = getRoundData(round);
+    const tables = Object.keys(roundData).map(function(k){ return Number(k); }).sort(function(a,b){ return a-b; });
+
+    let text = "ラウンド" + round + " 観戦メモ\n";
+    if(tables.length === 0){
+      text += "（メモはありません）\n";
+    }else{
+      tables.forEach(function(t){
+        const info = roundData[t];
+        const deck = info.deck || "";
+        const memo = info.memo || "";
+        text += "卓" + t + " デッキ:" + deck + " メモ:" + memo + "\n";
+      });
+    }
+
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        alert("このラウンドの内容をクリップボードにコピーしました。");
+      }).catch(function(){
+        alert(text);
+      });
+    }else{
+      alert(text);
+    }
+  });
 
   renderTables();
 </script>
